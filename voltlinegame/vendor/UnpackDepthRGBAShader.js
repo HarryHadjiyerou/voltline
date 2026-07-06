@@ -1,10 +1,11 @@
 ( function () {
 
 	/**
- * Full-screen textured quad shader
+ * Unpack RGBA depth shader
+ * - show RGBA encoded depth as monochrome color
  */
 
-	const CopyShader = {
+	const UnpackDepthRGBAShader = {
 		uniforms: {
 			'tDiffuse': {
 				value: null
@@ -31,15 +32,16 @@
 
 		varying vec2 vUv;
 
+		#include <packing>
+
 		void main() {
 
-			gl_FragColor = texture2D( tDiffuse, vUv );
-			gl_FragColor.a *= opacity;
-
+			float depth = 1.0 - unpackRGBAToDepth( texture2D( tDiffuse, vUv ) );
+			gl_FragColor = vec4( vec3( depth ), opacity );
 
 		}`
 	};
 
-	THREE.CopyShader = CopyShader;
+	THREE.UnpackDepthRGBAShader = UnpackDepthRGBAShader;
 
 } )();
