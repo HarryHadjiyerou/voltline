@@ -435,7 +435,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.45;
+renderer.toneMappingExposure=1.52;
 wrap.appendChild(renderer.domElement);
 
 var scene=new THREE.Scene();
@@ -623,37 +623,34 @@ var GRID_CELL=400/56;
 /* ---------------- road (8 recycled segments, texture-based neon) ---------------- */
 var SEG=30,SEGN=8,ROAD_SPAN=SEG*SEGN;
 var roadTex=canvasTex(256,1024,function(ct){
-  ct.fillStyle='#07060d';ct.fillRect(0,0,256,1024);
-  for(var i=0;i<2400;i++){ // asphalt grain
-    ct.fillStyle='rgba(175,190,235,'+(Math.random()*0.05)+')';
+  // holo-glass roadway: translucent blue light panels
+  var g0=ct.createLinearGradient(0,0,256,0);
+  g0.addColorStop(0,'#0e2748');g0.addColorStop(0.5,'#123058');g0.addColorStop(1,'#0e2748');
+  ct.fillStyle=g0;ct.fillRect(0,0,256,1024);
+  for(var i=0;i<900;i++){ // energy grain
+    ct.fillStyle='rgba(140,200,255,'+(Math.random()*0.07)+')';
     ct.fillRect(Math.random()*256,Math.random()*1024,1.5,1.5);
   }
-  ct.fillStyle='rgba(0,0,0,0.3)'; // tire wear bands per lane
-  [26,60,110,144,196,230].forEach(function(wx){ct.fillRect(wx-7,0,14,1024);});
-  for(var o=0;o<10;o++){ // oily iridescent blotches
-    var ox=rnd(20,236),oy=rnd(0,1024),orr=rnd(18,50);
-    var og=ct.createRadialGradient(ox,oy,2,ox,oy,orr);
-    og.addColorStop(0,'rgba(150,60,220,0.07)');og.addColorStop(1,'rgba(0,0,0,0)');
-    ct.fillStyle=og;ct.fillRect(ox-orr,oy-orr,orr*2,orr*2);
+  ct.fillStyle='rgba(40,120,200,0.25)'; // lane light panels
+  [54,128,202].forEach(function(lx){ct.fillRect(lx-30,0,60,1024);});
+  for(var y=0;y<1024;y+=128){ // glowing panel seams
+    var sg=ct.createLinearGradient(0,y-10,0,y+14);
+    sg.addColorStop(0,'rgba(0,229,255,0)');
+    sg.addColorStop(0.5,'rgba(0,229,255,0.5)');
+    sg.addColorStop(1,'rgba(0,229,255,0)');
+    ct.fillStyle=sg;ct.fillRect(0,y-10,256,24);
+    ct.fillStyle='rgba(120,230,255,0.8)';ct.fillRect(0,y,256,2);
   }
-  ct.fillStyle='rgba(120,140,255,0.06)';
-  for(var y=0;y<1024;y+=128)ct.fillRect(0,y,256,2);
-  for(var gr=0;gr<6;gr++){ // service grates
-    var gx=rnd(30,190),gy=rnd(0,990);
-    ct.fillStyle='#04040a';ct.fillRect(gx,gy,34,20);
-    ct.fillStyle='rgba(140,160,220,0.15)';
-    for(var gl=0;gl<5;gl++)ct.fillRect(gx+3,gy+3+gl*3.4,28,1);
-  }
-  ct.fillStyle='#00e5ff';ct.fillRect(4,0,4,1024);   // edge neon
+  ct.fillStyle='#00e5ff';ct.fillRect(3,0,5,1024);   // edge rails
   ct.fillStyle='#ff2d95';ct.fillRect(11,0,2,1024);
   ct.fillStyle='#fcee0a';ct.fillRect(250,0,3,1024);
   ct.fillStyle='#ff3b3b';
   for(var yr=0;yr<1024;yr+=64)ct.fillRect(243,yr,3,30);
-  ct.fillStyle='rgba(205,220,255,0.5)'; // worn lane dashes
+  ct.fillStyle='rgba(235,245,255,0.85)'; // lane dashes
   for(var y2=0;y2<1024;y2+=96){ct.fillRect(85,y2,2.5,40);ct.fillRect(170,y2,2.5,40);}
-  ct.fillStyle='rgba(0,229,255,0.85)';  // holo lane-assist twin line down the centre
+  ct.fillStyle='rgba(0,229,255,0.95)';  // centre holo guide pair
   ct.fillRect(124,0,2,1024);ct.fillRect(131,0,2,1024);
-  ct.strokeStyle='rgba(255,181,74,0.14)';ct.lineWidth=4;
+  ct.strokeStyle='rgba(255,181,74,0.25)';ct.lineWidth=4;
   for(var cv=48;cv<1024;cv+=256){
     ct.beginPath();
     ct.moveTo(104,cv+22);ct.lineTo(128,cv);ct.lineTo(152,cv+22);
@@ -662,14 +659,14 @@ var roadTex=canvasTex(256,1024,function(ct){
 });
 roadTex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 var roadMat=new THREE.MeshStandardMaterial({map:roadTex,emissiveMap:roadTex,
-  emissive:0xffffff,emissiveIntensity:0.55,metalness:0.75,roughness:0.35});
-roadMat.transparent=true;roadMat.opacity=0.85;
+  emissive:0xffffff,emissiveIntensity:0.75,metalness:0.6,roughness:0.25});
+roadMat.transparent=true;roadMat.opacity=0.58;
 /* real-time planar reflection under the asphalt (wet-road look) */
 var reflector=null;
 try{
   if(THREE.Reflector){
     reflector=new THREE.Reflector(new THREE.PlaneGeometry(10.4,240),
-      {clipBias:0.003,textureWidth:512,textureHeight:512,color:0x0a0d12});
+      {clipBias:0.003,textureWidth:512,textureHeight:512,color:0x16202e});
     reflector.rotation.x=-Math.PI/2;
     reflector.position.set(0,-0.04,-90);
     scene.add(reflector);
@@ -1568,6 +1565,7 @@ function spawnRow(){
     if(diff>0.3&&Math.random()<0.3)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
   }else if(r<0.64&&S.dist>1500){
     // police blockade — every lane walled but one
+    clearCorridor(zb);
     if(Math.random()<0.5)banner('POLICE BLOCKADE');
     var opLane=-1;
     for(var l3=0;l3<3;l3++){
@@ -1581,15 +1579,19 @@ function spawnRow(){
     var gcands=[];
     for(var lg=0;lg<3;lg++)if(lg!==open&&lg!==tl)gcands.push(lg);
     if(gcands.length){
+      clearCorridor(zb);
       spawnGunner(LANE_X[gcands[irnd(0,gcands.length-1)]],zb);
       if(Math.random()<0.4)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
     }
   }else if(tl<0&&avail('DRONEOB')&&r<0.75){
+    clearCorridor(zb);
     placeObs('DRONEOB',0,zb);
   }else if(tl<0&&avail('EWALL2')&&open!==1&&r<0.81){
+    clearCorridor(zb);
     placeObs('EWALL2',open===0?1.5:-1.5,zb);
     if(diff>0.4&&Math.random()<0.5)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
   }else{
+    clearCorridor(zb);
     var closed=[];
     for(var l4=0;l4<3;l4++)if(l4!==open&&l4!==tl)closed.push(l4);
     var n2=(Math.random()<0.25+diff*0.45)?closed.length:Math.min(1,closed.length);
@@ -1781,16 +1783,17 @@ function mkCar(kind){
 /* glTF car bodies (CC0 by Quaternius) — dress pool cars once templates load */
 var CAR_TPL={},VEH_TPL={},QUADRA_TPL=null,RIDER_TPL=null;
 var GLTF_VEH={
-  volt:   {file:'models/volt_rebel.glb',   len:2.9, rider:{yf:0.6, z:0.12, pose:0.5}},
+  volt:   {file:'models/volt_rebel.glb',   len:2.9, flip:true, rider:{yf:0.6, z:0.12, pose:0.5}},
   drifter:{file:'models/moto5.glb',        len:2.7, rider:{yf:0.7, z:0.22, pose:0.55}},
   katana: {file:'models/katana_sketch.glb',len:2.8, rider:{yf:0.66,z:0.12, pose:0.5}},
   spectre:{file:'models/spectre_hover.glb',len:3.6, hover:0.3, rider:{yf:0.72,z:-0.15,pose:0.35}}
 };
-function prepBikeTemplate(root,len){
+function prepBikeTemplate(root,len,flip){
   var holder=new THREE.Group();holder.add(root);
   var box=new THREE.Box3().setFromObject(holder);
   var size=box.getSize(new THREE.Vector3());
   if(size.x>size.z){root.rotation.y=Math.PI/2;box.setFromObject(holder);size=box.getSize(new THREE.Vector3());}
+  if(flip)root.rotation.y+=Math.PI; // nose away from the camera
   var s=(len||2.7)/size.z;
   root.scale.multiplyScalar(s);
   box.setFromObject(holder);
@@ -1822,6 +1825,7 @@ function buildGltfVeh(def){
     if(RIDER_TPL){
       rider=new THREE.Group();
       var ch=RIDER_TPL.clone();
+      ch.rotation.y=Math.PI; // face down the road
       ch.traverse(function(n){if(/weapon/i.test(n.name||''))n.visible=false;});
       ch.scale.multiplyScalar(0.66);
       ch.position.set(0,-0.3,0.05); // hips at the seat pivot, boots tucked into the flanks
@@ -1834,7 +1838,8 @@ function buildGltfVeh(def){
     g.add(rider);
   }
   return {g:g,spins:spins,spinR:0.42,exGlows:[exGlow],rider:rider,
-    riderPose:cfg.rider?(RIDER_TPL?cfg.rider.pose*0.6:cfg.rider.pose):0.5,squash:0.3,hover:cfg.hover||0,
+    riderPose:cfg.rider?(RIDER_TPL?-cfg.rider.pose*0.6:cfg.rider.pose):0.5,
+    riderSign:(cfg.rider&&RIDER_TPL)?-1:1,squash:0.3,hover:cfg.hover||0,
     lampY:Math.min(0.75,t.h*0.45),lampZ:-t.len/2+0.04};
 }
 function prepNpc(root){
@@ -2016,12 +2021,12 @@ if(THREE.GLTFLoader)(function(){
   });
   Object.keys(GLTF_VEH).forEach(function(id){
     L.load(GLTF_VEH[id].file,function(res){
-      VEH_TPL[id]=prepBikeTemplate(res.scene,GLTF_VEH[id].len);
+      VEH_TPL[id]=prepBikeTemplate(res.scene,GLTF_VEH[id].len,GLTF_VEH[id].flip);
       if(mode!=='play')setVehicle((mode==='garage')?VEHICLES[gIdx].id:SAVE.vehicle);
     },undefined,function(){/* procedural fallback */});
   });
   L.load('models/quadra.glb',function(res){
-    QUADRA_TPL=prepBikeTemplate(res.scene,3.6);
+    QUADRA_TPL=prepBikeTemplate(res.scene,3.6,true);
     upgradeCop();
   },undefined,function(){/* procedural cop fallback */});
   L.load('models/npc.glb',function(res){ // the main character
@@ -2146,6 +2151,23 @@ function takeCar(){
   for(var i=0;i<CARS.length;i++)if(!CARS[i].active)return CARS[i];
   return null;
 }
+function obsInLane(lane,z0,z1){
+  for(var i=0;i<OBS.length;i++){
+    var o=OBS[i];if(!o.active)continue;
+    if(laneOfX(o.g.position.x)!==lane)continue;
+    var z=o.g.position.z;
+    if(z>z0&&z<z1)return true;
+  }
+  return false;
+}
+function clearCorridor(zb){ // despawn cars overlapping a freshly planned row (beyond the fog line)
+  for(var i=0;i<CARS.length;i++){
+    var c=CARS[i];
+    if(c.active&&c.g.position.z<zb+80&&c.g.position.z>zb-40){
+      c.active=false;c.g.visible=false;
+    }
+  }
+}
 function laneBusy(lane,z,rad){
   for(var i=0;i<CARS.length;i++){
     var c=CARS[i];
@@ -2175,10 +2197,22 @@ function updTraffic(dt,dz){
     var om=(S.eff*c.frac)*dt/0.3;
     for(var w=0;w<c.wheels.length;w++)c.wheels[w].rotation.x-=om;
     c.changeT-=dt;
+    var cz=c.g.position.z;
+    if(obsInLane(c.lane,cz-30,cz+3)){ // a barrier is closing in from behind — drive out of its lane
+      var esc=[];
+      if(c.lane>0&&!laneBusy(c.lane-1,cz,13)&&!obsInLane(c.lane-1,cz-45,cz+8))esc.push(-1);
+      if(c.lane<2&&!laneBusy(c.lane+1,cz,13)&&!obsInLane(c.lane+1,cz-45,cz+8))esc.push(1);
+      if(esc.length){
+        c.lane=clamp(c.lane+esc[irnd(0,esc.length-1)],0,2);
+        c.ind=0;c.changeT=rnd(4,9);
+      }else if(cz<-70){
+        c.active=false;c.g.visible=false;continue; // exits under cover of fog
+      }
+    }
     if(c.changeT<=0.8&&c.ind===0){ // telegraph a lane change with indicators
       var opts=[];
-      if(c.lane>0&&!laneBusy(c.lane-1,c.g.position.z,16))opts.push(-1);
-      if(c.lane<2&&!laneBusy(c.lane+1,c.g.position.z,16))opts.push(1);
+      if(c.lane>0&&!laneBusy(c.lane-1,c.g.position.z,16)&&!obsInLane(c.lane-1,cz-50,cz+8))opts.push(-1);
+      if(c.lane<2&&!laneBusy(c.lane+1,c.g.position.z,16)&&!obsInLane(c.lane+1,cz-50,cz+8))opts.push(1);
       c.ind=opts.length?opts[irnd(0,opts.length-1)]:0;
       if(!c.ind)c.changeT=rnd(3,7);
     }
@@ -2478,7 +2512,7 @@ function updBike(dt){
   bike.rotation.z=-S.lean;
   bike.rotation.y=-S.lean*0.35;
   bike.scale.y=1-(VEH.squash||0.38)*S.slF;
-  if(VEH.rider)VEH.rider.rotation.x=(VEH.riderPose!==undefined?VEH.riderPose:0.82)+0.6*S.slF;
+  if(VEH.rider)VEH.rider.rotation.x=(VEH.riderPose!==undefined?VEH.riderPose:0.82)+(VEH.riderSign||1)*0.6*S.slF;
   var om=S.eff/(VEH.spinR||0.38);
   for(var i=0;i<VEH.spins.length;i++){
     var sp=VEH.spins[i];
