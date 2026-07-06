@@ -1014,12 +1014,13 @@ function updStorm(dt){
 
 /* ---------------- player vehicles (v2 — garage roster + factory builds) ---------------- */
 var VEHICLES=[
- {id:'volt',   name:'VOLT RUNNER', tag:'Rebel concept bike',    price:0,    spd:1.00,hnd:1.00,arm:1.00,accent:0xff2d95,glow:0xff2d95},
+ {id:'volt',   name:'VOLT RUNNER', tag:'Factory street bike',   price:0,    spd:1.00,hnd:1.00,arm:1.00,accent:0xff8a2a,glow:0xff8a2a},
  {id:'drifter',name:'DRIFTER',     tag:'Street cruiser',        price:250,  spd:1.02,hnd:0.95,arm:1.10,accent:0xff8a2a,glow:0xff8a2a},
  {id:'katana', name:'KATANA ZX',   tag:'Razor superbike',       price:450,  spd:1.12,hnd:1.15,arm:0.75,accent:0x00e5ff,glow:0x00e5ff},
  {id:'ronin',  name:'RONIN GT',    tag:'Turbine muscle coupe',  price:1000, spd:1.06,hnd:0.85,arm:1.50,accent:0xffb54a,glow:0xffb54a},
  {id:'spectre',name:'SPECTRE X',   tag:'Gravlift prototype',    price:1800, spd:1.22,hnd:1.30,arm:0.65,accent:0xb44bff,glow:0xb44bff},
- {id:'aegis',  name:'AEGIS MK-II', tag:'Armored enforcer trike',price:2800, spd:0.96,hnd:0.85,arm:2.00,accent:0x3dff7a,glow:0x3dff7a}
+ {id:'aegis',  name:'AEGIS MK-II', tag:'Armored enforcer trike',price:2800, spd:0.96,hnd:0.85,arm:2.00,accent:0x3dff7a,glow:0x3dff7a},
+ {id:'rebel',  name:'REBEL F1',    tag:'Hubless concept bike',  price:3500, spd:1.15,hnd:1.05,arm:0.90,accent:0xff2d95,glow:0xff2d95}
 ];
 function vehDef(id){
   for(var i=0;i<VEHICLES.length;i++)if(VEHICLES[i].id===id)return VEHICLES[i];
@@ -1555,14 +1556,14 @@ function spawnRow(){
   var r=Math.random();
   if(r<0.52){
     // traffic wave — weave between moving cars
-    var n=(Math.random()<0.35+diff*0.5)?2:1;
+    var n=(Math.random()<0.22+diff*0.33)?2:1;
     var placed=0;
     for(var l2=0;l2<3&&placed<n;l2++){
       if(l2===open||l2===tl)continue;
       if(Math.random()<0.85){spawnCar(l2,zb+rnd(30,50));placed++;}
     }
-    if(diff>0.2&&Math.random()<0.5)spawnCar(open,zb-rnd(10,40));
-    if(diff>0.3&&Math.random()<0.3)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
+    if(diff>0.25&&Math.random()<0.32)spawnCar(open,zb-rnd(10,40));
+    if(diff>0.35&&Math.random()<0.2)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
   }else if(r<0.64&&S.dist>1500){
     // police blockade — every lane walled but one
     clearCorridor(zb);
@@ -1574,7 +1575,7 @@ function spawnRow(){
       opLane=l3;
     }
     if(opLane>=0&&Math.random()<0.85)placeOp(LANE_X[opLane]+rnd(-0.5,0.5),zb+1.8);
-    if(Math.random()<0.5)placeObs(pickPass(),LANE_X[open],zb-rnd(8,14));
+    if(Math.random()<0.32)placeObs(pickPass(),LANE_X[open],zb-rnd(8,14));
   }else if(OP_TPL&&S.dist>600&&r<0.71){
     var gcands=[];
     for(var lg=0;lg<3;lg++)if(lg!==open&&lg!==tl)gcands.push(lg);
@@ -1589,22 +1590,22 @@ function spawnRow(){
   }else if(tl<0&&avail('EWALL2')&&open!==1&&r<0.81){
     clearCorridor(zb);
     placeObs('EWALL2',open===0?1.5:-1.5,zb);
-    if(diff>0.4&&Math.random()<0.5)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
+    if(diff>0.45&&Math.random()<0.32)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
   }else{
     clearCorridor(zb);
     var closed=[];
     for(var l4=0;l4<3;l4++)if(l4!==open&&l4!==tl)closed.push(l4);
-    var n2=(Math.random()<0.25+diff*0.45)?closed.length:Math.min(1,closed.length);
+    var n2=(Math.random()<0.16+diff*0.3)?closed.length:Math.min(1,closed.length);
     for(var i2=0;i2<n2;i2++){
       var lane=closed[i2],t;
       if(tl<0&&avail('TRUCK')&&Math.random()<0.04){t='TRUCK';tl=lane;}
       else t=(Math.random()<0.45)?pickPass():pickHardType();
       placeObs(t,LANE_X[lane],(t==='TRUCK')?zb-30:zb-rnd(0,3));
     }
-    if(diff>0.35&&Math.random()<0.4)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
+    if(diff>0.4&&Math.random()<0.28)placeObs(pickPass(),LANE_X[open],zb-rnd(0,3));
   }
   spawnPickups(open,zb);
-  spawnGap=clamp(62-diff*24,32,62)+rnd(-4,4);
+  spawnGap=clamp(74-diff*24,46,74)+rnd(-4,4);
 }
 function spawnTick(dz){
   spawnAcc+=dz;
@@ -1783,10 +1784,11 @@ function mkCar(kind){
 /* glTF car bodies (CC0 by Quaternius) — dress pool cars once templates load */
 var CAR_TPL={},VEH_TPL={},QUADRA_TPL=null,RIDER_TPL=null;
 var GLTF_VEH={
-  volt:   {file:'models/volt_rebel.glb',   len:2.9, flip:true, rider:{yf:0.6, z:0.12, pose:0.5}},
-  drifter:{file:'models/moto5.glb',        len:2.7, rider:{yf:0.7, z:0.22, pose:0.55}},
-  katana: {file:'models/katana_sketch.glb',len:2.8, rider:{yf:0.66,z:0.12, pose:0.5}},
-  spectre:{file:'models/spectre_hover.glb',len:3.6, hover:0.3, rider:{yf:0.72,z:-0.15,pose:0.35}}
+  volt:   {file:'models/volt_scifi.glb',   len:2.55, flip:true},
+  drifter:{file:'models/moto5.glb',        len:2.45, rider:{yf:0.7, z:0.2, pose:0.55}},
+  katana: {file:'models/katana_sketch.glb',len:2.5,  rider:{yf:0.66,z:0.1, pose:0.5}},
+  spectre:{file:'models/spectre_hover.glb',len:3.2,  hover:0.3, rider:{yf:0.72,z:-0.12,pose:0.35}},
+  rebel:  {file:'models/volt_rebel.glb',   len:2.6,  flip:true, rider:{yf:0.6, z:0.1, pose:0.5}}
 };
 function prepBikeTemplate(root,len,flip){
   var holder=new THREE.Group();holder.add(root);
@@ -1827,7 +1829,7 @@ function buildGltfVeh(def){
       var ch=RIDER_TPL.clone();
       ch.rotation.y=Math.PI; // face down the road
       ch.traverse(function(n){if(/weapon/i.test(n.name||''))n.visible=false;});
-      ch.scale.multiplyScalar(0.66);
+      ch.scale.multiplyScalar(0.72);
       ch.position.set(0,-0.3,0.05); // hips at the seat pivot, boots tucked into the flanks
       rider.add(ch);
       rider.position.set(0,t.h*cfg.rider.yf+0.16,cfg.rider.z);
