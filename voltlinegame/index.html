@@ -230,10 +230,15 @@ h2{font-size:18px;font-weight:800;letter-spacing:.3em;color:#e8fbff;text-transfo
 <script src="vendor/three.min.js"></script>
 <script src="vendor/CopyShader.js"></script>
 <script src="vendor/LuminosityHighPassShader.js"></script>
+<script src="vendor/FXAAShader.js"></script>
+<script src="vendor/SAOShader.js"></script>
+<script src="vendor/DepthLimitedBlurShader.js"></script>
+<script src="vendor/UnpackDepthRGBAShader.js"></script>
 <script src="vendor/EffectComposer.js"></script>
 <script src="vendor/RenderPass.js"></script>
 <script src="vendor/ShaderPass.js"></script>
 <script src="vendor/UnrealBloomPass.js"></script>
+<script src="vendor/SAOPass.js"></script>
 <script src="vendor/Reflector.js"></script>
 <script src="vendor/GLTFLoader.js"></script>
 <script>
@@ -431,7 +436,7 @@ function sfxOver(){
 /* ---------------- renderer / scene ---------------- */
 var wrap=$('wrap');
 var renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2.5));
 renderer.setSize(window.innerWidth,window.innerHeight);
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -448,15 +453,44 @@ camera.position.set(0,2.35,5.1);
 scene.add(new THREE.AmbientLight(0x2a1c5e,1.25));
 var hemi=new THREE.HemisphereLight(0x4422cc,0x05030a,0.75);scene.add(hemi);
 var dir=new THREE.DirectionalLight(0x9db4ff,0.8);dir.position.set(18,30,-6);scene.add(dir);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+dir.castShadow=true;
+dir.shadow.mapSize.set(1024,1024);
+dir.shadow.camera.left=-14;dir.shadow.camera.right=14;
+dir.shadow.camera.top=34;dir.shadow.camera.bottom=-34;
+dir.shadow.camera.near=5;dir.shadow.camera.far=90;
+dir.shadow.bias=-0.0005;
+var shadowCatcher=new THREE.Mesh(new THREE.PlaneGeometry(11,150),
+  new THREE.ShadowMaterial({opacity:0.34}));
+shadowCatcher.rotation.x=-Math.PI/2;
+shadowCatcher.position.set(0,0.006,-45);
+shadowCatcher.receiveShadow=true;
+scene.add(shadowCatcher);
+function enableCast(root){
+  root.traverse(function(n){if(n.isMesh)n.castShadow=true;});
+}
 var pCyan=new THREE.PointLight(0x00e5ff,1.1,26);pCyan.position.set(-5,2.5,-4);scene.add(pCyan);
 var pMag=new THREE.PointLight(0xff2d6a,1.35,26);pMag.position.set(5,2.5,-10);scene.add(pMag);
 
 /* ---------------- post-processing (real bloom) + image-based lighting ---------------- */
-var composer=null,bloomPass=null;
+var composer=null,bloomPass=null,fxaaPass=null;
 try{
   if(THREE.EffectComposer&&THREE.UnrealBloomPass){
     composer=new THREE.EffectComposer(renderer);
     composer.addPass(new THREE.RenderPass(scene,camera));
+    var noFx=/[?&]nofx=1/.test(location.search);
+    try{
+      if(!noFx&&THREE.SAOPass){ // ambient occlusion: contact shading in crevices
+        var saoPass=new THREE.SAOPass(scene,camera,false,true);
+        saoPass.params.saoBias=0.5;
+        saoPass.params.saoIntensity=0.012;
+        saoPass.params.saoScale=32;
+        saoPass.params.saoKernelRadius=16;
+        saoPass.params.saoBlur=true;
+        composer.addPass(saoPass);
+      }
+    }catch(e){}
     bloomPass=new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth,window.innerHeight),1.0,0.55,0.78);
     composer.addPass(bloomPass);
@@ -474,6 +508,13 @@ try{
       };
       composer.addPass(new THREE.ShaderPass(GradeShader));
     }
+    if(THREE.FXAAShader){ // final edge smoothing
+      fxaaPass=new THREE.ShaderPass(THREE.FXAAShader);
+      var fpr=renderer.getPixelRatio();
+      fxaaPass.material.uniforms['resolution'].value.set(
+        1/(window.innerWidth*fpr),1/(window.innerHeight*fpr));
+      composer.addPass(fxaaPass);
+    }
   }
 }catch(e){composer=null;}
 (function(){ // neon environment map so metals pick up real reflections
@@ -489,7 +530,7 @@ try{
     strip(0x8a5cff,0,30,4,34,10);strip(0xdfe9ff,8,5,24,12,2.5);
     strip(0xff8a2a,-10,4,20,8,2);
     var pm=new THREE.PMREMGenerator(renderer);
-    scene.environment=pm.fromScene(env,0.05).texture;
+    scene.environment=pm.fromScene(env,0.04).texture;
     pm.dispose();
   }catch(e){}
 })();
@@ -658,8 +699,23 @@ var roadTex=canvasTex(256,1024,function(ct){
   }
 });
 roadTex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+var roadNrm=canvasTex(256,1024,function(ct){
+  ct.fillStyle='#8080ff';ct.fillRect(0,0,256,1024);
+  for(var i=0;i<4200;i++){ // fine surface bump
+    var v=(Math.random()*30-15)|0;
+    ct.fillStyle='rgb('+(128+v)+','+(128+v)+',255)';
+    ct.fillRect(Math.random()*256,Math.random()*1024,2,2);
+  }
+  for(var y=0;y<1024;y+=128){ // bevelled panel seams
+    ct.fillStyle='rgb(128,96,255)';ct.fillRect(0,y-2,256,2);
+    ct.fillStyle='rgb(128,160,255)';ct.fillRect(0,y+2,256,2);
+  }
+});
+roadNrm.encoding=THREE.LinearEncoding;
+roadNrm.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 var roadMat=new THREE.MeshStandardMaterial({map:roadTex,emissiveMap:roadTex,
-  emissive:0xffffff,emissiveIntensity:0.75,metalness:0.6,roughness:0.25});
+  emissive:0xffffff,emissiveIntensity:0.75,metalness:0.6,roughness:0.25,
+  normalMap:roadNrm,normalScale:new THREE.Vector2(0.4,0.4)});
 roadMat.transparent=true;roadMat.opacity=0.58;
 /* real-time planar reflection under the asphalt (wet-road look) */
 var reflector=null;
@@ -901,9 +957,47 @@ function addSign(w2,h2,tex,x,y,z,ry,span){
   m.userData={f:1,span:span};
   scene.add(m);bills.push(m);
 }
+var scrollSigns=[];
 for(var vs=0;vs<4;vs++){
   var sd2=(vs%2)?1:-1;
-  addSign(1.6,6.4,vSignTex(),sd2*rnd(7.4,9.2),rnd(4,8),-vs*44-rnd(0,14),sd2*-0.6,180);
+  var vtex=vSignTex();
+  addSign(1.6,6.4,vtex,sd2*rnd(7.4,9.2),rnd(4,8),-vs*44-rnd(0,14),sd2*-0.6,180);
+  if(vs<2){ // two of them slowly scroll their glyphs
+    vtex.wrapT=THREE.RepeatWrapping;
+    scrollSigns.push({tex:vtex,spd:0.05+vs*0.04});
+  }
+}
+/* scrolling news tickers */
+var tickers=[];
+function mkTicker(x,y,z,ry){
+  var cv=document.createElement('canvas');cv.width=512;cv.height=48;
+  var tex=new THREE.CanvasTexture(cv);tex.encoding=THREE.sRGBEncoding;
+  var m=new THREE.Mesh(new THREE.PlaneGeometry(6,0.55),
+    new THREE.MeshBasicMaterial({map:tex}));
+  m.position.set(x,y,z);m.rotation.y=ry;
+  m.userData={f:1,span:220};
+  scene.add(m);bills.push(m);
+  tickers.push({ctx:cv.getContext('2d'),tex:tex,off:Math.random()*600,
+    msg:'\u25c6 VOLTLINE GRAND PRIX \u25c6 SECTOR-9 CLOSED \u25c6 NEON-7 LIVE \u25c6 \u96f7\u4e03\u533a \u25c6 ',
+    col:NEONS[irnd(0,NEONS.length-1)]});
+}
+mkTicker(-7.6,4.6,-95,0.6);
+mkTicker(7.6,5.4,-200,-0.6);
+var tickAcc=0;
+function updTickers(dt){
+  tickAcc+=dt;if(tickAcc<0.08)return;tickAcc=0;
+  for(var i=0;i<tickers.length;i++){
+    var t=tickers[i];
+    t.off+=9;
+    var ct=t.ctx;
+    ct.fillStyle='#050510';ct.fillRect(0,0,512,48);
+    ct.font='800 34px Arial';ct.textBaseline='middle';
+    ct.fillStyle=t.col;ct.shadowColor=t.col;ct.shadowBlur=10;
+    var w=Math.max(1,ct.measureText(t.msg).width);
+    var x0=-(t.off%w);
+    ct.fillText(t.msg,x0,26);ct.fillText(t.msg,x0+w,26);
+    t.tex.needsUpdate=true;
+  }
 }
 addSign(7,9,megaTex(),-16,16,-70,0.55,240);
 addSign(7,9,megaTex(),17,18,-180,-0.55,240);
@@ -1308,12 +1402,13 @@ function buildTrike(def){
     squash:0.3,hover:0,lampY:0.58,lampZ:-1.64};
 }
 function buildVehicle(def){
-  var o;
-  if(VEH_TPL&&GLTF_VEH&&VEH_TPL[def.id]&&GLTF_VEH[def.id])o=buildGltfVeh(def);
+  var o,gltf=(VEH_TPL&&GLTF_VEH&&VEH_TPL[def.id]&&GLTF_VEH[def.id]);
+  if(gltf)o=buildGltfVeh(def);
   else if(def.id==='ronin')o=buildCarPlayer(def);
   else if(def.id==='spectre')o=buildHover(def);
   else if(def.id==='aegis')o=buildTrike(def);
   else o=buildBike(def);
+  if(!gltf)o.g.scale.multiplyScalar(0.82);
   addCommon(o,def);
   return o;
 }
@@ -1328,6 +1423,7 @@ function setVehicle(id){
   var def=vehDef(id);
   if(VEH)bike.remove(VEH.g);
   VEH=buildVehicle(def);
+  enableCast(VEH.g);
   bike.add(VEH.g);
   underLight.color.setHex(def.glow);
 }
@@ -1385,6 +1481,7 @@ function emitTrail(dt){
 /* ---------------- obstacles ---------------- */
 var OBS=[]; // pool
 function reg(type,g,def){
+  enableCast(g);
   g.visible=false;scene.add(g);
   var o={type:type,g:g,active:false,hx:def.hx,y0:def.y0,y1:def.y1,hz:def.hz,
     dmg:def.dmg,passable:def.passable,relMul:def.relMul||1,upd:def.upd||null,ph:0,tx:0};
@@ -1774,6 +1871,7 @@ function mkCarModel(kind){
 }
 function mkCar(kind){
   var m=mkCarModel(kind);
+  enableCast(m.g);
   m.g.visible=false;scene.add(m.g);
   var c={g:m.g,wheels:m.wheels,iL:m.iL,iR:m.iR,hw:m.hw,kind:kind,
     active:false,lane:1,frac:0.5,changeT:9,ind:0,hit:false,nm:false};
@@ -1784,11 +1882,11 @@ function mkCar(kind){
 /* glTF car bodies (CC0 by Quaternius) — dress pool cars once templates load */
 var CAR_TPL={},VEH_TPL={},QUADRA_TPL=null,RIDER_TPL=null;
 var GLTF_VEH={
-  volt:   {file:'models/volt_scifi.glb',   len:2.55, flip:true},
-  drifter:{file:'models/moto5.glb',        len:2.45, rider:{yf:0.7, z:0.2, pose:0.55}},
-  katana: {file:'models/katana_sketch.glb',len:2.5,  rider:{yf:0.66,z:0.1, pose:0.5}},
-  spectre:{file:'models/spectre_hover.glb',len:3.2,  hover:0.3, rider:{yf:0.72,z:-0.12,pose:0.35}},
-  rebel:  {file:'models/volt_rebel.glb',   len:2.6,  flip:true, rider:{yf:0.6, z:0.1, pose:0.5}}
+  volt:   {file:'models/volt_scifi.glb',   len:2.1, flip:true},
+  drifter:{file:'models/moto5.glb',        len:2.0, rider:{yf:0.7, z:0.17, pose:0.55}},
+  katana: {file:'models/katana_sketch.glb',len:2.05, rider:{yf:0.66,z:0.08,pose:0.5}},
+  spectre:{file:'models/spectre_hover.glb',len:2.65, hover:0.3, rider:{yf:0.72,z:-0.1,pose:0.35}},
+  rebel:  {file:'models/volt_rebel.glb',   len:2.15, flip:true, rider:{yf:0.6, z:0.08,pose:0.5}}
 };
 function prepBikeTemplate(root,len,flip){
   var holder=new THREE.Group();holder.add(root);
@@ -1829,7 +1927,7 @@ function buildGltfVeh(def){
       var ch=RIDER_TPL.clone();
       ch.rotation.y=Math.PI; // face down the road
       ch.traverse(function(n){if(/weapon/i.test(n.name||''))n.visible=false;});
-      ch.scale.multiplyScalar(0.72);
+      ch.scale.multiplyScalar(0.6);
       ch.position.set(0,-0.3,0.05); // hips at the seat pivot, boots tucked into the flanks
       rider.add(ch);
       rider.position.set(0,t.h*cfg.rider.yf+0.16,cfg.rider.z);
@@ -1939,6 +2037,7 @@ function dressGunner(e){
   if(e.dressed||!OP_TPL)return;
   var o=OP_TPL.clone();
   o.scale.multiplyScalar(2.05);
+  enableCast(o);
   e.g.add(o);
   e.mz=glowSprite(0xff5b3a,0.7);
   e.mz.position.set(0.12,1.15,0.6);
@@ -2115,7 +2214,9 @@ function dressCar(c){
   if(!pick||!CAR_TPL[pick]||c.dressed===pick)return;
   var t=CAR_TPL[pick];
   while(c.g.children.length)c.g.remove(c.g.children[0]);
-  c.g.add(t.obj.clone());
+  var dressed=t.obj.clone();
+  enableCast(dressed);
+  c.g.add(dressed);
   c.hw=Math.min(1.05,t.hw+0.05);
   c.wheels=[];
   c.g.traverse(function(n){if(n.isMesh&&/wheel/i.test(n.name||''))c.wheels.push(n);});
@@ -2265,7 +2366,7 @@ function buildCop(){
   g.userData={spins:[wF.userData.spin,wB.userData.spin],sR:sGlowR,sB:sGlowB};
   return g;
 }
-var cop=buildCop();cop.visible=false;scene.add(cop);
+var cop=buildCop();enableCast(cop);cop.visible=false;scene.add(cop);
 var pur={on:false,t:0,kill:false,cool:0};
 var intro={t:0};
 function upgradeCop(){
@@ -2278,6 +2379,7 @@ function upgradeCop(){
   var hR=glowSprite(0xdfefff,0.8);hR.position.set(0.5,0.55,-QUADRA_TPL.len/2-0.05);cop.add(hR);
   var wm=[];
   cop.traverse(function(n){if(n.isMesh&&/wheel|tire|tyre/i.test(n.name||''))wm.push(n);});
+  enableCast(cop);
   cop.userData={spins:null,wheelMeshes:wm,sR:sR,sB:sB};
 }
 function startSiren(){
@@ -2486,6 +2588,11 @@ function updAmbient(dt,dz){
     if(Math.random()<0.004)ud.f=0.12;
     ud.f=lerp(ud.f,1,3*dt);
     b.material.color.setScalar(ud.f);
+  }
+  updTickers(dt);
+  for(var ss=0;ss<scrollSigns.length;ss++){
+    var sg2=scrollSigns[ss];
+    sg2.tex.offset.y=(sg2.tex.offset.y+dt*sg2.spd)%1;
   }
   var bl2=(Math.sin(T*2.2)>0.6)?1:0.15;
   for(var b2=0;b2<beacons.length;b2++)beacons[b2].material.opacity=bl2;
@@ -2837,6 +2944,8 @@ function frame(now){
       lowQ=true;renderer.setPixelRatio(1);
       rain.visible=false;
       if(reflector)reflector.visible=false;
+      dir.castShadow=false;
+      renderer.shadowMap.enabled=false;
       var fq;
       for(fq=0;fq<farBlds.length;fq++)farBlds[fq].visible=false;
       for(fq=0;fq<roadDetail.length;fq++)roadDetail[fq].visible=false;
@@ -2925,6 +3034,11 @@ function frame(now){
 window.addEventListener('resize',function(){
   renderer.setSize(window.innerWidth,window.innerHeight);
   if(composer)composer.setSize(window.innerWidth,window.innerHeight);
+  if(fxaaPass){
+    var fpr2=renderer.getPixelRatio();
+    fxaaPass.material.uniforms['resolution'].value.set(
+      1/(window.innerWidth*fpr2),1/(window.innerHeight*fpr2));
+  }
   camera.aspect=window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
 });
